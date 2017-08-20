@@ -9,6 +9,10 @@ public class TestJoin {
 		@Override
 		public void run() {
 			for (i = 0; i < 1000; i++) {
+				// 使当前线程放弃CPU的执行权，但是不表示当前线程不执行了。仍然会进行CPU的资源争夺
+				// 由于主线程调用了join()，所以主线程还是会等待increaseThread执行完毕。
+				// 即使让出了CPU，下一次获取CPU的还是此线程
+				Thread.yield();
 			}
 		}
 	}
