@@ -8,7 +8,7 @@ import java.util.List;
  * 感谢博主“会画原型写需求的程序员”的无私奉献
  * 
  * 热心网友的回复： 
- * 1.在构造器中不应该启动线程，这样会造成this溢出，可以定义一个start方法。
+ * 1. 在构造器中不应该启动线程，这样会造成this溢出，可以定义一个start方法。
  * 2. 线程池与客户端是典型的生产者--消费者关系，可以考虑使用BlockingQueue来代替LinkedList，就不用去wait notify了。
  * 3. 单例模式没用同步。
  * 4. 如4楼说的那样，关闭消费者的同时要关闭生产者，线程池关闭就不应该允许客户端再提交任务
@@ -16,11 +16,11 @@ import java.util.List;
  */
 public final class ThreadPool {
 	// 线程池中默认线程的个数为5
-	private static int worker_num = 5;
-	// 工作线程
-	private WorkThread[] workThreads;
+	private static int threadNums = 5;
+	// 运行的线程
+	private WorkThread[] runningThreads;
 	// 已经处理的任务
-	private static volatile int finished_task = 0;
+	private static volatile int finishedTasks = 0;
 	// 任务队列，作为一个缓冲,List线程不安全
 	private List<Runnable> taskQueue = new LinkedList<Runnable>();
 	private static ThreadPool threadPool;
@@ -31,27 +31,27 @@ public final class ThreadPool {
 	}
 
 	// 创建线程池,worker_num为线程池中工作线程的个数
-	private ThreadPool(int worker_num) {
-		ThreadPool.worker_num = worker_num;
-		workThreads = new WorkThread[worker_num];
-		for (int i = 0; i < worker_num; i++) {
-			workThreads[i] = new WorkThread();
-			workThreads[i].start();// 开启线程池中的线程
+	private ThreadPool(int threadNums) {
+		ThreadPool.threadNums = threadNums;
+		runningThreads = new WorkThread[threadNums];
+		for (int i = 0; i < threadNums; i++) {
+			runningThreads[i] = new WorkThread();
+			runningThreads[i].start();// 开启线程池中的线程
 		}
 	}
 
 	// 单态模式，获得一个默认线程个数的线程池
 	public static ThreadPool getThreadPool() {
-		return getThreadPool(ThreadPool.worker_num);
+		return getThreadPool(ThreadPool.threadNums);
 	}
 
 	// 单态模式，获得一个指定线程个数的线程池,worker_num(>0)为线程池中工作线程的个数
 	// worker_num<=0创建默认的工作线程个数
-	public static ThreadPool getThreadPool(int worker_num1) {
-		if (worker_num1 <= 0)
-			worker_num1 = ThreadPool.worker_num;
+	public static ThreadPool getThreadPool(int threadNums) {
+		if (threadNums <= 0)
+			threadNums = ThreadPool.threadNums;
 		if (threadPool == null)
-			threadPool = new ThreadPool(worker_num1);
+			threadPool = new ThreadPool(threadNums);
 		return threadPool;
 	}
 
@@ -63,7 +63,7 @@ public final class ThreadPool {
 		}
 	}
 
-	// 批量执行任务,其实只是把任务加入任务队列，什么时候执行有线程池管理器觉定
+	// 批量执行任务,其实只是把任务加入任务队列，什么时候执行由线程池管理器决定
 	public void execute(Runnable[] task) {
 		synchronized (taskQueue) {
 			for (Runnable t : task)
@@ -72,7 +72,7 @@ public final class ThreadPool {
 		}
 	}
 
-	// 批量执行任务,其实只是把任务加入任务队列，什么时候执行有线程池管理器觉定
+	// 批量执行任务,其实只是把任务加入任务队列，什么时候执行由线程池管理器决定
 	public void execute(List<Runnable> task) {
 		synchronized (taskQueue) {
 			for (Runnable t : task)
@@ -91,16 +91,16 @@ public final class ThreadPool {
 			}
 		}
 		// 工作线程停止工作，且置为null
-		for (int i = 0; i < worker_num; i++) {
-			workThreads[i].stopWorker();
-			workThreads[i] = null;
+		for (int i = 0; i < threadNums; i++) {
+			runningThreads[i].stopWorker();
+			runningThreads[i] = null;
 		}
 		threadPool=null;
 		taskQueue.clear();// 清空任务队列
 	}
 	
 	// 评论的代码 ：线程池销毁的方法，没有考虑到taskQueue的同步问题。
-	// 如果在你判断 taskQueue.isEmpty（）成功了，在你即将销毁 工作线程时，
+	// 如果在你判断 taskQueue.isEmpty（）成功了，在你即将销毁工作线程时，
 	// 有别的线程将任务加入到taskQueue里，怎么办？
 	public void destroy2() {
 		synchronized (taskQueue) {
@@ -111,9 +111,9 @@ public final class ThreadPool {
 					e.printStackTrace();
 				}
 			}
-			for (int i = 0; i < worker_num; i++) {
-				workThreads[i].stopWorker();
-				workThreads[i] = null;
+			for (int i = 0; i < threadNums; i++) {
+				runningThreads[i].stopWorker();
+				runningThreads[i] = null;
 			}
 			threadPool = null;
 			taskQueue.clear();
@@ -122,12 +122,12 @@ public final class ThreadPool {
 
 	// 返回工作线程的个数
 	public int getWorkThreadNumber() {
-		return worker_num;
+		return threadNums;
 	}
 
 	// 返回已完成任务的个数,这里的已完成是只出了任务队列的任务个数，可能该任务并没有实际执行完成
 	public int getFinishedTasknumber() {
-		return finished_task;
+		return finishedTasks;
 	}
 
 	// 返回任务队列的长度，即还没处理的任务个数
@@ -138,8 +138,8 @@ public final class ThreadPool {
 	// 覆盖toString方法，返回线程池信息：工作线程个数和已完成任务个数
 	@Override
 	public String toString() {
-		return "WorkThread number:" + worker_num + "  finished task number:"
-				+ finished_task + "  wait task number:" + getWaitTasknumber();
+		return "WorkThread number:" + threadNums + "  finished task number:"
+				+ finishedTasks + "  wait task number:" + getWaitTasknumber();
 	}
 
 	/**
@@ -150,13 +150,14 @@ public final class ThreadPool {
 		private boolean isRunning = true;
 
 		/*
-		 * 关键所在啊，如果任务队列不空，则取出任务执行，若任务队列空，则等待
+		 * 如果任务队列不空，则取出任务执行，若任务队列空，则等待
 		 */
 		@Override
 		public void run() {
 			Runnable r = null;
 			while (isRunning) {// 注意，若线程无效则自然结束run方法，该线程就没用了
 				synchronized (taskQueue) {
+					System.out.println("TaskQueue size: " + taskQueue.size());
 					while (isRunning && taskQueue.isEmpty()) {// 队列为空
 						try {
 							taskQueue.wait(20);
@@ -176,7 +177,8 @@ public final class ThreadPool {
 					}
 					//r.run();
 				}
-				finished_task++;
+				finishedTasks++;
+				// System.out.println("Finished Tasks:" + finishedTasks);
 				r = null;
 			}
 		}
